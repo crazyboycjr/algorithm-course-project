@@ -11,12 +11,11 @@
 using namespace std;
 
 enum Operation {
-	NOP,
+	NOP = 0,
 	DEL,
 	INS,
 	SUB
 };
-
 
 const int maxn = 10200;
 const int maxm = 10020;
@@ -25,14 +24,12 @@ const int maxl = 32;
 // encapsulation use
 const int offset = maxn * maxm / 4;
 int ft[maxn * maxm / 32];
-int fa[maxn][maxm];
-int opt[maxn][maxm];
 class Option {
 public:
 	static uint8_t mem[maxn * maxm / 2];
 	static bool getfa_failed(int n, int m) {
 		int pos = n * maxm +  m;
-		return !(ft[pos >> 3] >> (pos & 3) & 1);
+		return !(ft[pos >> 5] >> (pos & 31) & 1);
 	}
 	static int getfa(int n, int m) {
 		int pos = n * maxm + m;
@@ -41,7 +38,7 @@ public:
 	}
 	static void putfa(int n, int m, int val) {
 		int pos = n * maxm + m;
-		ft[pos >> 3] |= 1 << (pos & 3);
+		ft[pos >> 5] |= 1 << (pos & 31);
 		int shift = (pos & 3) << 1;
 		mem[pos >> 2] = val << shift | (~(3 << shift) & mem[pos >> 2]);
 	}
@@ -125,9 +122,11 @@ void construct(int n, int m) {
 	}
 	LOG("%d %d %d\n", n, m, Option::getfa(n, m));
 	int fanm = rev_mapping[Option::getfa(n, m)];
-	if (Option::getfa_failed(n, m))
+	if (Option::getfa_failed(n, m)) {
 		fanm = 0;
-	else fanm = find_number(fanm, m);
+	} else {
+		fanm = find_number(fanm, m);
+	}
 	if (Option::getfa_failed(n, m) && m != 0) {
 		start = m;
 	}
@@ -181,31 +180,6 @@ int *calc(char *s, int n, char *t, int m) {
 		opt[0][i] = INS;
 	}
 	*/
-	/*
-	for (int ii, i = 1; i <= n; i++) {
-		ii = i & 1;
-		tmp_dp[ii][0] = i;
-		opt[i][0] = DEL;
-		for (int j = 1; j <= m; j++) {
-			if (s[i] == t[j]) {
-				tmp_dp[ii][j] = tmp_dp[ii ^ 1][j - 1];
-				opt[i][j] = NOP;
-			} else {
-				if (tmp_dp[ii ^ 1][j] < tmp_dp[ii][j - 1]) {
-					tmp_dp[ii][j] = tmp_dp[ii ^ 1][j] + 1;
-					opt[i][j] = DEL;
-				} else {
-					tmp_dp[ii][j] = tmp_dp[ii][j - 1] + 1;
-					opt[i][j] = INS;
-				}
-				if (tmp_dp[ii][j] > tmp_dp[ii ^ 1][j - 1] + 1) {
-					tmp_dp[ii][j] = tmp_dp[ii ^ 1][j - 1] + 1;
-					opt[i][j] = SUB;
-				}
-			}
-		}
-	}
-	*/
 	static int a[maxn];
 	for (int jj, j = 1; j <= m; j++) {
 		jj = j & 1;
@@ -244,33 +218,9 @@ int *calc(char *s, int n, char *t, int m) {
 	return a;
 }
 
-void test() {
-	int cnt = 0;
-	for (int i = 1; i <= maxn; i++) {
-		for (int j = 1; j <= maxm; j++) {
-			cnt++;
-			Option::putfa(i, j, cnt & 3);
-			Option::putopt(i, j, 3 - (cnt & 3));
-		}
-	}
-	cnt = 0;
-	for (int i = 1; i <= maxn; i++) {
-		for (int j = 1; j <= maxm; j++) {
-			cnt++;
-			assert(Option::getfa(i, j) == (cnt & 3));
-			if (Option::getopt(i, j) != 3 - (cnt & 3)) {
-				printf("%d %d\n", i, j);
-			}
-			assert(Option::getopt(i, j) == 3 - (cnt & 3));
-		}
-	}
-}
-
 int main() {
 	mapping['A'] = 0; mapping['G'] = 1; mapping['C'] = 2; mapping['T'] = 3;
 	rev_mapping[0] = 'A'; rev_mapping[1] = 'G'; rev_mapping[2] = 'C'; rev_mapping[3] = 'T';
-
-	//test();
 
 	scanf("%s\n", s + 1);
 	n = strlen(s + 1);
