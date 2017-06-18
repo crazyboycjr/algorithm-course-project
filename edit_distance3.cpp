@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstring>
+#include <cassert>
 
 #include <string>
 #include <vector>
@@ -16,21 +17,64 @@ enum Operation {
 	SUB
 };
 
+
 const int maxn = 10200;
 const int maxm = 10020;
 const int maxl = 32;
+
+// encapsulation use
+const int offset = maxn * maxm / 4;
+int ft[maxn * maxm / 32];
+int fa[maxn][maxm];
+int opt[maxn][maxm];
+class Option {
+public:
+	static uint8_t mem[maxn * maxm / 2];
+	static bool getfa_failed(int n, int m) {
+		int pos = n * maxm +  m;
+		return !(ft[pos >> 3] >> (pos & 3) & 1);
+	}
+	static int getfa(int n, int m) {
+		int pos = n * maxm + m;
+		int shift = (pos & 3) << 1;
+		return (mem[pos >> 2] & (3 << shift)) >> shift;
+	}
+	static void putfa(int n, int m, int val) {
+		int pos = n * maxm + m;
+		ft[pos >> 3] |= 1 << (pos & 3);
+		int shift = (pos & 3) << 1;
+		mem[pos >> 2] = val << shift | (~(3 << shift) & mem[pos >> 2]);
+	}
+	static int getopt(int n, int m) {
+		int pos = n * maxm + m;
+		int shift = (pos & 3) << 1;
+		return (mem[(pos >> 2) + offset] & (3 << shift)) >> shift;
+	}
+	static void putopt(int n, int m, int val) {
+		int pos = n * maxm + m;
+		int shift = (pos & 3) << 1;
+		mem[(pos >> 2) + offset] = val << shift | (~(3 << shift) & mem[(pos >> 2) + offset]);
+	}
+	static void clearopt() {
+		memset(mem + offset, 0, sizeof mem / 2);
+	}
+};
+uint8_t Option::mem[maxn * maxm / 2];
+
+
 struct Edge {
 	int nex, y;
 } e[maxm * 4];
 int list[maxm], cnt;
 char s[maxn], out[maxn];
 char ns[maxm][maxl];
-int fa[maxn][maxm];
-int dp[maxn][maxm][2];
-Operation opt[maxn][maxm];
+//int fa[maxn][maxm];
+int dp[2][maxm][2];
+//Operation opt[maxn][maxm];
 unordered_map<string, int> M[2];
 unordered_map<int, vector<int>> Mv[2];
 int n, k, m, tlen, outlen;
+int mapping[256], rev_mapping[4];
 
 #ifdef DEBUG
 #define LOG(...) fprintf(stderr, __VA_ARGS__)
@@ -41,7 +85,8 @@ int n, k, m, tlen, outlen;
 void print_opt(int n, int m) {
 	if (n + m == 0)
 		return;
-	switch (opt[n][m]) {
+	int tmp_opt = Option::getopt(n, m);
+	switch (tmp_opt) {
 		case NOP:
 			print_opt(n - 1, m - 1);
 			break;
@@ -60,6 +105,17 @@ void print_opt(int n, int m) {
 	}
 }
 
+inline int find_number(uint8_t x, int m) {
+	int ret = 0, t = M[0][string(ns[m] + 1, tlen - 1)];
+	for (auto v : Mv[1][t]) {
+		if (ns[v][1] == x) {
+			ret = v;
+			break;
+		}
+	}
+	return ret;
+}
+
 int start;
 void construct(int n, int m) {
 	if (n + m == 0) {
@@ -67,23 +123,29 @@ void construct(int n, int m) {
 			out[++outlen] = ns[start][i];
 		return;
 	}
-	LOG("%d %d %d\n", n, m, fa[n][m]);
-	if (fa[n][m] == 0 && m != 0)
+	LOG("%d %d %d\n", n, m, Option::getfa(n, m));
+	int fanm = rev_mapping[Option::getfa(n, m)];
+	if (Option::getfa_failed(n, m))
+		fanm = 0;
+	else fanm = find_number(fanm, m);
+	if (Option::getfa_failed(n, m) && m != 0) {
 		start = m;
-	switch (opt[n][m]) {
+	}
+	int tmp_opt = Option::getopt(n, m);
+	switch (tmp_opt) {
 		case NOP:
-			construct(n - 1, fa[n][m]);
+			construct(n - 1, fanm);
 			if (m) out[++outlen] = ns[m][tlen];
 			break;
 		case DEL:
-			construct(n, fa[n][m]);
+			construct(n, fanm);
 			if (m) out[++outlen] = ns[m][tlen];
 			break;
 		case INS:
 			construct(n - 1, m);
 			break;
 		case SUB:
-			construct(n - 1, fa[n][m]);
+			construct(n - 1, fanm);
 			if (m) out[++outlen] = ns[m][tlen];
 			break;
 	}
@@ -110,7 +172,8 @@ int *calc(char *s, int n, char *t, int m) {
 
 	for (int i = 1; i <= n; i++) {
 		tmp_dp[i][0] = i;
-		opt[i][0] = DEL;
+		//opt[i][0] = DEL;
+		Option::putopt(i, 0, DEL);
 	}
 	/*
 	for (int i = 1; i <= m; i++) {
@@ -147,22 +210,27 @@ int *calc(char *s, int n, char *t, int m) {
 	for (int jj, j = 1; j <= m; j++) {
 		jj = j & 1;
 		tmp_dp[0][jj] = j;
-		opt[0][j] = INS;
+		//opt[0][j] = INS;
+		Option::putopt(0, j, INS);
 		for (int i = 1; i <= n; i++) {
 			if (s[i] == t[j]) {
 				tmp_dp[i][jj] = tmp_dp[i - 1][jj ^ 1];
-				opt[i][j] = NOP;
+				//opt[i][j] = NOP;
+				Option::putopt(i, j, NOP);
 			} else {
 				if (tmp_dp[i - 1][jj] < tmp_dp[i][jj ^ 1]) {
 					tmp_dp[i][jj] = tmp_dp[i - 1][jj] + 1;
-					opt[i][j] = DEL;
+					//opt[i][j] = DEL;
+					Option::putopt(i, j, DEL);
 				} else {
 					tmp_dp[i][jj] = tmp_dp[i][jj ^ 1] + 1;
-					opt[i][j] = INS;
+					//opt[i][j] = INS;
+					Option::putopt(i, j, INS);
 				}
 				if (tmp_dp[i][jj] > tmp_dp[i - 1][jj ^ 1] + 1) {
 					tmp_dp[i][jj] = tmp_dp[i - 1][jj ^ 1] + 1;
-					opt[i][j] = SUB;
+					//opt[i][j] = SUB;
+					Option::putopt(i, j, SUB);
 				}
 			}
 		}
@@ -176,7 +244,34 @@ int *calc(char *s, int n, char *t, int m) {
 	return a;
 }
 
+void test() {
+	int cnt = 0;
+	for (int i = 1; i <= maxn; i++) {
+		for (int j = 1; j <= maxm; j++) {
+			cnt++;
+			Option::putfa(i, j, cnt & 3);
+			Option::putopt(i, j, 3 - (cnt & 3));
+		}
+	}
+	cnt = 0;
+	for (int i = 1; i <= maxn; i++) {
+		for (int j = 1; j <= maxm; j++) {
+			cnt++;
+			assert(Option::getfa(i, j) == (cnt & 3));
+			if (Option::getopt(i, j) != 3 - (cnt & 3)) {
+				printf("%d %d\n", i, j);
+			}
+			assert(Option::getopt(i, j) == 3 - (cnt & 3));
+		}
+	}
+}
+
 int main() {
+	mapping['A'] = 0; mapping['G'] = 1; mapping['C'] = 2; mapping['T'] = 3;
+	rev_mapping[0] = 'A'; rev_mapping[1] = 'G'; rev_mapping[2] = 'C'; rev_mapping[3] = 'T';
+
+	//test();
+
 	scanf("%s\n", s + 1);
 	n = strlen(s + 1);
 	scanf("%d\n", &m);
@@ -209,12 +304,13 @@ int main() {
 		}
 		LOG("\n");
 	}
-	memset(opt, 0, sizeof opt);
+	//memset(opt, 0, sizeof opt);
+	Option::clearopt();
 
 	for (int j = 2; j <= n; j++) {
-		int cur = j & 1;
+		int cur = j & 1, jj = j & 1;
 		for (int i = 1; i <= m; i++) {
-			int &res = dp[j][i][cur];
+			int &res = dp[jj][i][cur];
 
 			// calc dp[j][i][cur ^ 1]
 			res = j >= (int)bound[i].size() ? j - tlen : bound[i][j];
@@ -223,28 +319,35 @@ int main() {
 			for (int y, k = list[i]; k; k = e[k].nex) {
 				y = e[k].y;
 				if (s[j] == ns[i][tlen]) {
-					if (res > dp[j - 1][y][cur ^ 1]) {
-						res = dp[j - 1][y][cur ^ 1];
-						fa[j][i] = y;
-						opt[j][i] = NOP;
+					if (res > dp[jj ^ 1][y][cur ^ 1]) {
+						res = dp[jj ^ 1][y][cur ^ 1];
+						//fa[j][i] = ns[y][1];
+						//opt[j][i] = NOP;
+						Option::putfa(j, i, mapping[(int)ns[y][1]]);
+						Option::putopt(j, i, NOP);
 					}
 				} else {
-					if (dp[j - 1][i][cur ^ 1] < dp[j][y][cur ^ 1]) {
-						if (res > dp[j - 1][i][cur ^ 1] + 1) {
-							res = dp[j - 1][i][cur ^ 1] + 1;
-							opt[j][i] = INS;
+					if (dp[jj ^ 1][i][cur ^ 1] < dp[jj][y][cur ^ 1]) {
+						if (res > dp[jj ^ 1][i][cur ^ 1] + 1) {
+							res = dp[jj ^ 1][i][cur ^ 1] + 1;
+							//opt[j][i] = INS;
+							Option::putopt(j, i, INS);
 						}
 					} else {
-						if (res > dp[j][y][cur ^ 1] + 1) {
-							res = dp[j][y][cur ^ 1] + 1;
-							fa[j][i] = y;
-							opt[j][i] = DEL;
+						if (res > dp[jj][y][cur ^ 1] + 1) {
+							res = dp[jj][y][cur ^ 1] + 1;
+							//fa[j][i] = ns[y][1];
+							//opt[j][i] = DEL;
+							Option::putfa(j, i, mapping[(int)ns[y][1]]);
+							Option::putopt(j, i, DEL);
 						}
 					}
-					if (res > dp[j - 1][y][cur ^ 1] + 1) {
-						res = dp[j - 1][y][cur ^ 1] + 1;
-						fa[j][i] = y;
-						opt[j][i] = SUB;
+					if (res > dp[jj ^ 1][y][cur ^ 1] + 1) {
+						res = dp[jj ^ 1][y][cur ^ 1] + 1;
+						//fa[j][i] = ns[y][1];
+						//opt[j][i] = SUB;
+						Option::putfa(j, i, mapping[(int)ns[y][1]]);
+						Option::putopt(j, i, SUB);
 					}
 				}
 			}
@@ -253,8 +356,8 @@ int main() {
 
 	int ans = maxn, en;
 	for (int i = 1; i <= m; i++)
-		if (ans > dp[n][i][n & 1]) {
-			ans = dp[n][i][n & 1];
+		if (ans > dp[n & 1][i][n & 1]) {
+			ans = dp[n & 1][i][n & 1];
 			en = i;
 		}
 
@@ -265,7 +368,8 @@ int main() {
 		putchar(out[i]);
 	printf("\n%d\n", ans);
 	
-	memset(opt, 0, sizeof opt);
+	//memset(opt, 0, sizeof opt);
+	Option::clearopt();
 	calc(s, n, out, outlen);
 	print_opt(n, outlen);
 	return 0;
