@@ -50,11 +50,11 @@ void print_opt(int n, int m) {
 			break;
 		case INS:
 			print_opt(n, m - 1);
-			printf("INS %d %c\n", n, s[m]);
+			printf("INS %d %c\n", n, out[m]);
 			break;
 		case SUB:
 			print_opt(n - 1, m - 1);
-			printf("SUB %d %c\n", n - 1, s[m]);
+			printf("SUB %d %c\n", n - 1, out[m]);
 			break;
 	}
 }
@@ -164,37 +164,40 @@ int main() {
 		}
 		LOG("\n");
 	}
+	int cur = 1;
 	memset(opt, 0, sizeof opt);
 	for (int j = 1; j <= n; j++) {
-		int cur = j & 1;
-		for (int i = 1; i <= m; i++) {
-			int &res = dp[j][i][cur];
-			res = dp[j][i][cur ^ 1];
-			for (int y, k = list[i]; k; k = e[k].nex) {
-				y = e[k].y;
-				if (s[j] == ns[i][tlen]) {
-					if (res > dp[j - 1][y][cur ^ 1]) {
-						res = dp[j - 1][y][cur ^ 1];
-						fa[j][i] = y;
-						opt[j][i] = NOP;
-					}
-				} else {
-					if (dp[j - 1][i][cur ^ 1] < dp[j][y][cur ^ 1]) {
-						if (res > dp[j - 1][i][cur ^ 1] + 1) {
-							res = dp[j - 1][i][cur ^ 1] + 1;
-							opt[j][i] = INS;
+		for (int kk = 1; kk <= tlen; kk++) {
+			cur ^= 1;
+			for (int i = 1; i <= m; i++) {
+				int &res = dp[j][i][cur];
+				res = dp[j][i][cur ^ 1];
+				for (int y, k = list[i]; k; k = e[k].nex) {
+					y = e[k].y;
+					if (s[j] == ns[i][tlen]) {
+						if (res > dp[j - 1][y][cur ^ 1]) {
+							res = dp[j - 1][y][cur ^ 1];
+							fa[j][i] = y;
+							opt[j][i] = NOP;
 						}
 					} else {
-						if (res > dp[j][y][cur ^ 1] + 1) {
-							res = dp[j][y][cur ^ 1] + 1;
-							fa[j][i] = y;
-							opt[j][i] = DEL;
+						if (dp[j - 1][i][cur ^ 1] < dp[j][y][cur ^ 1]) {
+							if (res > dp[j - 1][i][cur ^ 1] + 1) {
+								res = dp[j - 1][i][cur ^ 1] + 1;
+								opt[j][i] = INS;
+							}
+						} else {
+							if (res > dp[j][y][cur ^ 1] + 1) {
+								res = dp[j][y][cur ^ 1] + 1;
+								fa[j][i] = y;
+								opt[j][i] = DEL;
+							}
 						}
-					}
-					if (res > dp[j - 1][y][cur ^ 1] + 1) {
-						res = dp[j - 1][y][cur ^ 1] + 1;
-						fa[j][i] = y;
-						opt[j][i] = SUB;
+						if (res > dp[j - 1][y][cur ^ 1] + 1) {
+							res = dp[j - 1][y][cur ^ 1] + 1;
+							fa[j][i] = y;
+							opt[j][i] = SUB;
+						}
 					}
 				}
 			}

@@ -17,38 +17,38 @@ enum Operation {
 	SUB
 };
 
-const int maxn = 10200;
-const int maxm = 10020;
-const int maxl = 32;
+const long maxn = 102000;
+const long maxm = 1002000;
+const long maxl = 32;
 
 // encapsulation use
-const int offset = maxn * maxm / 4;
+const long offset = maxn * maxm / 4;
 int ft[maxn * maxm / 32];
 class Option {
 public:
 	static uint8_t mem[maxn * maxm / 2];
-	static bool getfa_failed(int n, int m) {
-		int pos = n * maxm +  m;
+	static bool getfa_failed(long n, long m) {
+		long pos = n * maxm +  m;
 		return !(ft[pos >> 5] >> (pos & 31) & 1);
 	}
-	static int getfa(int n, int m) {
-		int pos = n * maxm + m;
+	static int getfa(long n, long m) {
+		long pos = n * maxm + m;
 		int shift = (pos & 3) << 1;
 		return (mem[pos >> 2] & (3 << shift)) >> shift;
 	}
-	static void putfa(int n, int m, int val) {
-		int pos = n * maxm + m;
+	static void putfa(long n, long m, int val) {
+		long pos = n * maxm + m;
 		ft[pos >> 5] |= 1 << (pos & 31);
 		int shift = (pos & 3) << 1;
 		mem[pos >> 2] = val << shift | (~(3 << shift) & mem[pos >> 2]);
 	}
-	static int getopt(int n, int m) {
-		int pos = n * maxm + m;
+	static int getopt(long n, long m) {
+		long pos = n * maxm + m;
 		int shift = (pos & 3) << 1;
 		return (mem[(pos >> 2) + offset] & (3 << shift)) >> shift;
 	}
-	static void putopt(int n, int m, int val) {
-		int pos = n * maxm + m;
+	static void putopt(long n, long m, int val) {
+		long pos = n * maxm + m;
 		int shift = (pos & 3) << 1;
 		mem[(pos >> 2) + offset] = val << shift | (~(3 << shift) & mem[(pos >> 2) + offset]);
 	}
@@ -61,12 +61,12 @@ uint8_t Option::mem[maxn * maxm / 2];
 
 struct Edge {
 	int nex, y;
-} e[maxm * 4];
-int list[maxm], cnt;
+} e[maxm * 4], e2[maxm * 4];
+int list[maxm], cnt, list2[maxm], cnt2;
 char s[maxn], out[maxn];
 char ns[maxm][maxl];
 //int fa[maxn][maxm];
-int dp[2][maxm][2];
+int dp[2][maxm];
 //Operation opt[maxn][maxm];
 unordered_map<string, int> M[2];
 unordered_map<int, vector<int>> Mv[2];
@@ -93,11 +93,11 @@ void print_opt(int n, int m) {
 			break;
 		case INS:
 			print_opt(n, m - 1);
-			printf("INS %d %c\n", n, s[m]);
+			printf("INS %d %c\n", n, out[m]);
 			break;
 		case SUB:
 			print_opt(n - 1, m - 1);
-			printf("SUB %d %c\n", n - 1, s[m]);
+			printf("SUB %d %c\n", n - 1, out[m]);
 			break;
 	}
 }
@@ -164,9 +164,13 @@ inline void addedge(int a, int b) {
 	e[++cnt] = (Edge){list[a], b}; list[a] = cnt;
 }
 
+inline void addedge2(int a, int b) {
+	e2[++cnt2] = (Edge){list2[a], b}; list2[a] = cnt2;
+}
+
 //int tmp_dp[2][maxn];
 int tmp_dp[maxn][2];
-int *calc(char *s, int n, char *t, int m) {
+int *calc(char *s, int n, char *t, int m, bool bf) {
 	tmp_dp[0][0] = 0;
 
 	for (int i = 1; i <= n; i++) {
@@ -208,10 +212,12 @@ int *calc(char *s, int n, char *t, int m) {
 				}
 			}
 		}
-		a[j] = tmp_dp[n][jj];
-		if (a[j] + n == j) {
-			a[j] = -1;
-			break;
+		if (!bf) {
+			a[j] = tmp_dp[n][jj];
+			if (a[j] + n == j) {
+				a[j] = -1;
+				break;
+			}
 		}
 	}
 	//return tmp_dp[n & 1];
@@ -222,6 +228,7 @@ int main() {
 	mapping['A'] = 0; mapping['G'] = 1; mapping['C'] = 2; mapping['T'] = 3;
 	rev_mapping[0] = 'A'; rev_mapping[1] = 'G'; rev_mapping[2] = 'C'; rev_mapping[3] = 'T';
 
+	fprintf(stderr, "begin to read\n");
 	scanf("%s\n", s + 1);
 	n = strlen(s + 1);
 	scanf("%d\n", &m);
@@ -232,18 +239,22 @@ int main() {
 		insert(1, i, ns[i] + 2, t - 1);
 	}
 	tlen = strlen(ns[1] + 1);
+
+	fprintf(stderr, "begin to build graph\n");
 	for (int t, i = 1; i <= m; i++) {
 		t = M[1][string(ns[i] + 2)];
 		//cout << t << " " << string(ns[i] + 2) << endl;
 		for (auto v : Mv[0][t]) {
 			addedge(v, i);
+			addedge2(i, v);
 			LOG("%d -> %d\n", i, v);
 		}
 	}
 	vector<int> bound[maxm]; // XXX maybe we can use vector<uint8_t>
+	fprintf(stderr, "ready to dp\n");
 	memset(dp, 127, sizeof dp);
 	for (int i = 1; i <= m; i++) {
-		int *a = calc(ns[i], tlen, s, n);
+		int *a = calc(ns[i], tlen, s, n, false);
 		for (int j = 0; j <= n; j++) {
 			//dp[j][i][1] = a[j];
 			if (a[j] == -1) {
@@ -257,57 +268,83 @@ int main() {
 	//memset(opt, 0, sizeof opt);
 	Option::clearopt();
 
-	for (int j = 2; j <= n; j++) {
-		int cur = j & 1, jj = j & 1;
-		for (int i = 1; i <= m; i++) {
-			int &res = dp[jj][i][cur];
+	static int q[2][maxm];
+	static bool inq[maxm];
 
-			// calc dp[j][i][cur ^ 1]
-			res = j >= (int)bound[i].size() ? j - tlen : bound[i][j];
-			//if (res > dp[j][i][cur ^ 1])
-			//	res = dp[j][i][cur ^ 1];
-			for (int y, k = list[i]; k; k = e[k].nex) {
-				y = e[k].y;
-				if (s[j] == ns[i][tlen]) {
-					if (res > dp[jj ^ 1][y][cur ^ 1]) {
-						res = dp[jj ^ 1][y][cur ^ 1];
-						//fa[j][i] = ns[y][1];
-						//opt[j][i] = NOP;
-						Option::putfa(j, i, mapping[(int)ns[y][1]]);
-						Option::putopt(j, i, NOP);
-					}
-				} else {
-					if (dp[jj ^ 1][i][cur ^ 1] < dp[jj][y][cur ^ 1]) {
-						if (res > dp[jj ^ 1][i][cur ^ 1] + 1) {
-							res = dp[jj ^ 1][i][cur ^ 1] + 1;
-							//opt[j][i] = INS;
-							Option::putopt(j, i, INS);
-						}
-					} else {
-						if (res > dp[jj][y][cur ^ 1] + 1) {
-							res = dp[jj][y][cur ^ 1] + 1;
+	for (int j = 2; j <= n; j++) {
+		int jj = j & 1;
+		fprintf(stderr, "current on %d\n", j);
+
+		for (int i = 1; i <= m; i++) {
+			dp[jj][i] = j >= (int)bound[i].size() ? j - tlen : bound[i][j];
+		}
+		int cur = 0;
+		int total = m;
+		int head(0), tail(0);
+		for (int i = 1; i <= m; i++)
+			q[cur][tail++] = i;
+		do {
+			for (int i = 0; i < total; i++)
+				inq[q[cur][i]] = false;
+			total = 0;
+			while (head < tail) {
+				int i = q[cur][head++];
+				int &res = dp[jj][i];
+				//res = j >= (int)bound[i].size() ? j - tlen : bound[i][j];
+				int tmp_res = res;
+				for (int y, k = list[i]; k; k = e[k].nex) {
+					y = e[k].y;
+					if (s[j] == ns[i][tlen]) {
+						if (res > dp[jj ^ 1][y]) {
+							res = dp[jj ^ 1][y];
 							//fa[j][i] = ns[y][1];
-							//opt[j][i] = DEL;
+							//opt[j][i] = NOP;
 							Option::putfa(j, i, mapping[(int)ns[y][1]]);
-							Option::putopt(j, i, DEL);
+							Option::putopt(j, i, NOP);
 						}
 					}
-					if (res > dp[jj ^ 1][y][cur ^ 1] + 1) {
-						res = dp[jj ^ 1][y][cur ^ 1] + 1;
+					if (res > dp[jj ^ 1][i] + 1) {
+						res = dp[jj ^ 1][i] + 1;
+						//opt[j][i] = INS;
+						Option::putopt(j, i, INS);
+					}
+					if (res > dp[jj][y] + 1) {
+						res = dp[jj][y] + 1;
+						//fa[j][i] = ns[y][1];
+						//opt[j][i] = DEL;
+						Option::putfa(j, i, mapping[(int)ns[y][1]]);
+						Option::putopt(j, i, DEL);
+					}
+					if (res > dp[jj ^ 1][y] + 1) {
+						res = dp[jj ^ 1][y] + 1;
 						//fa[j][i] = ns[y][1];
 						//opt[j][i] = SUB;
 						Option::putfa(j, i, mapping[(int)ns[y][1]]);
 						Option::putopt(j, i, SUB);
 					}
 				}
+				if (res < tmp_res) {
+					for (int y, k = list2[i]; k; k = e2[k].nex) {
+						y = e2[k].y;
+						if (!inq[y]) {
+							inq[y] = true;
+							q[cur ^ 1][total++] = y;
+						}
+					}
+				}
 			}
-		}
+			cur ^= 1;
+			if (total > 0) {
+				head = 0;
+				tail = total;
+			}
+		} while (total > 0);
 	}
 
 	int ans = maxn, en;
 	for (int i = 1; i <= m; i++)
-		if (ans > dp[n & 1][i][n & 1]) {
-			ans = dp[n & 1][i][n & 1];
+		if (ans > dp[n & 1][i]) {
+			ans = dp[n & 1][i];
 			en = i;
 		}
 
@@ -320,7 +357,7 @@ int main() {
 	
 	//memset(opt, 0, sizeof opt);
 	Option::clearopt();
-	calc(s, n, out, outlen);
+	calc(s, n, out, outlen, true);
 	print_opt(n, outlen);
 	return 0;
 }
