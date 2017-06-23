@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <iostream>
 
+#include <omp.h>
+
 using namespace std;
 
 enum Operation {
@@ -37,10 +39,13 @@ public:
 		return (mem[pos >> 2] & (3 << shift)) >> shift;
 	}
 	static void putfa(long n, long m, int val) {
-		long pos = n * maxm + m;
-		ft[pos >> 5] |= 1 << (pos & 31);
-		int shift = (pos & 3) << 1;
-		mem[pos >> 2] = val << shift | (~(3 << shift) & mem[pos >> 2]);
+		#pragma omp critical
+		{
+			long pos = n * maxm + m;
+			ft[pos >> 5] |= 1 << (pos & 31);
+			int shift = (pos & 3) << 1;
+			mem[pos >> 2] = val << shift | (~(3 << shift) & mem[pos >> 2]);
+		}
 	}
 	static int getopt(long n, long m) {
 		long pos = n * maxm + m;
@@ -48,9 +53,12 @@ public:
 		return (mem[(pos >> 2) + offset] & (3 << shift)) >> shift;
 	}
 	static void putopt(long n, long m, int val) {
-		long pos = n * maxm + m;
-		int shift = (pos & 3) << 1;
-		mem[(pos >> 2) + offset] = val << shift | (~(3 << shift) & mem[(pos >> 2) + offset]);
+		#pragma omp critical
+		{
+			long pos = n * maxm + m;
+			int shift = (pos & 3) << 1;
+			mem[(pos >> 2) + offset] = val << shift | (~(3 << shift) & mem[(pos >> 2) + offset]);
+		}
 	}
 	static void clearopt() {
 		memset(mem + offset, 0, sizeof mem / 2);
@@ -58,16 +66,10 @@ public:
 };
 uint8_t Option::mem[maxn * maxm / 2];
 
-
-struct Edge {
-	int nex, y;
-} e[maxm * 4], e2[maxm * 4];
-int list[maxm], cnt, list2[maxm], cnt2;
+int pre[maxm][5], nex[maxm][5];
 char s[maxn], out[maxn];
 char ns[maxm][maxl];
-//int fa[maxn][maxm];
-int dp[2][maxm];
-//Operation opt[maxn][maxm];
+int dp[maxm][2];
 unordered_map<string, int> M[2];
 unordered_map<int, vector<int>> Mv[2];
 int n, k, m, tlen, outlen;
@@ -161,53 +163,41 @@ void insert(int x, int y, char *c, int len) {
 }
 
 inline void addedge(int a, int b) {
-	e[++cnt] = (Edge){list[a], b}; list[a] = cnt;
+	pre[a][++pre[a][0]] = b;
 }
 
 inline void addedge2(int a, int b) {
-	e2[++cnt2] = (Edge){list2[a], b}; list2[a] = cnt2;
+	nex[a][++nex[a][0]] = b;
 }
 
-//int tmp_dp[2][maxn];
 int tmp_dp[maxn][2];
 int *calc(char *s, int n, char *t, int m, bool bf) {
 	tmp_dp[0][0] = 0;
 
 	for (int i = 1; i <= n; i++) {
 		tmp_dp[i][0] = i;
-		//opt[i][0] = DEL;
 		Option::putopt(i, 0, DEL);
 	}
-	/*
-	for (int i = 1; i <= m; i++) {
-		tmp_dp[0][i] = i;
-		opt[0][i] = INS;
-	}
-	*/
+
 	static int a[maxn];
 	for (int jj, j = 1; j <= m; j++) {
 		jj = j & 1;
 		tmp_dp[0][jj] = j;
-		//opt[0][j] = INS;
 		Option::putopt(0, j, INS);
 		for (int i = 1; i <= n; i++) {
 			if (s[i] == t[j]) {
 				tmp_dp[i][jj] = tmp_dp[i - 1][jj ^ 1];
-				//opt[i][j] = NOP;
 				Option::putopt(i, j, NOP);
 			} else {
 				if (tmp_dp[i - 1][jj] < tmp_dp[i][jj ^ 1]) {
 					tmp_dp[i][jj] = tmp_dp[i - 1][jj] + 1;
-					//opt[i][j] = DEL;
 					Option::putopt(i, j, DEL);
 				} else {
 					tmp_dp[i][jj] = tmp_dp[i][jj ^ 1] + 1;
-					//opt[i][j] = INS;
 					Option::putopt(i, j, INS);
 				}
 				if (tmp_dp[i][jj] > tmp_dp[i - 1][jj ^ 1] + 1) {
 					tmp_dp[i][jj] = tmp_dp[i - 1][jj ^ 1] + 1;
-					//opt[i][j] = SUB;
 					Option::putopt(i, j, SUB);
 				}
 			}
@@ -220,11 +210,12 @@ int *calc(char *s, int n, char *t, int m, bool bf) {
 			}
 		}
 	}
-	//return tmp_dp[n & 1];
 	return a;
 }
 
 int main() {
+	omp_set_num_threads(4);
+
 	mapping['A'] = 0; mapping['G'] = 1; mapping['C'] = 2; mapping['T'] = 3;
 	rev_mapping[0] = 'A'; rev_mapping[1] = 'G'; rev_mapping[2] = 'C'; rev_mapping[3] = 'T';
 
@@ -250,13 +241,12 @@ int main() {
 			LOG("%d -> %d\n", i, v);
 		}
 	}
-	vector<int> bound[maxm]; // XXX maybe we can use vector<uint8_t>
+	vector<int> bound[maxm];
 	fprintf(stderr, "ready to dp\n");
 	memset(dp, 127, sizeof dp);
 	for (int i = 1; i <= m; i++) {
 		int *a = calc(ns[i], tlen, s, n, false);
 		for (int j = 0; j <= n; j++) {
-			//dp[j][i][1] = a[j];
 			if (a[j] == -1) {
 				break;
 			}
@@ -265,86 +255,84 @@ int main() {
 		}
 		LOG("\n");
 	}
-	//memset(opt, 0, sizeof opt);
 	Option::clearopt();
 
 	static int q[2][maxm];
 	static bool inq[maxm];
 
 	for (int j = 2; j <= n; j++) {
-		int jj = j & 1;
+		int jj = j & 1, ljj = jj ^ 1;
 		fprintf(stderr, "current on %d\n", j);
 
+		#pragma omp parallel for schedule(dynamic, 1024)
 		for (int i = 1; i <= m; i++) {
-			dp[jj][i] = j >= (int)bound[i].size() ? j - tlen : bound[i][j];
+			dp[i][jj] = j >= (int)bound[i].size() ? j - tlen : bound[i][j];
 		}
-		int cur = 0;
-		int total = m;
-		int head(0), tail(0);
+
+		int cur = 0, tail = 0, total = m;
+		#pragma omp parallel for schedule(dynamic, 1024)
 		for (int i = 1; i <= m; i++)
-			q[cur][tail++] = i;
+			q[cur][i - 1] = i;
+		tail = m;
 		do {
+			#pragma omp parallel for schedule(dynamic, 1024)
 			for (int i = 0; i < total; i++)
 				inq[q[cur][i]] = false;
 			total = 0;
-			while (head < tail) {
-				int i = q[cur][head++];
-				int &res = dp[jj][i];
-				//res = j >= (int)bound[i].size() ? j - tlen : bound[i][j];
-				int tmp_res = res;
-				for (int y, k = list[i]; k; k = e[k].nex) {
-					y = e[k].y;
+			//while (head < tail) {
+			#pragma omp parallel for schedule(dynamic, 512)
+			for (int ii = 0; ii < tail; ii++) {
+				//int i = q[cur][head++];
+				int i = q[cur][ii];
+				int res = dp[i][jj], tmp_res = res;
+				//#pragma omp parallel for reduction(min:res)
+				for (int k = 1; k <= pre[i][0]; k++) {
+					int y = pre[i][k];
 					if (s[j] == ns[i][tlen]) {
-						if (res > dp[jj ^ 1][y]) {
-							res = dp[jj ^ 1][y];
-							//fa[j][i] = ns[y][1];
-							//opt[j][i] = NOP;
+						if (res > dp[y][ljj]) {
+							res = dp[y][ljj];
 							Option::putfa(j, i, mapping[(int)ns[y][1]]);
 							Option::putopt(j, i, NOP);
 						}
 					}
-					if (res > dp[jj ^ 1][i] + 1) {
-						res = dp[jj ^ 1][i] + 1;
-						//opt[j][i] = INS;
+					if (res > dp[i][ljj] + 1) {
+						res = dp[i][ljj] + 1;
 						Option::putopt(j, i, INS);
 					}
-					if (res > dp[jj][y] + 1) {
-						res = dp[jj][y] + 1;
-						//fa[j][i] = ns[y][1];
-						//opt[j][i] = DEL;
+					if (res > dp[y][jj] + 1) {
+						res = dp[y][jj] + 1;
 						Option::putfa(j, i, mapping[(int)ns[y][1]]);
 						Option::putopt(j, i, DEL);
 					}
-					if (res > dp[jj ^ 1][y] + 1) {
-						res = dp[jj ^ 1][y] + 1;
-						//fa[j][i] = ns[y][1];
-						//opt[j][i] = SUB;
+					if (res > dp[y][ljj] + 1) {
+						res = dp[y][ljj] + 1;
 						Option::putfa(j, i, mapping[(int)ns[y][1]]);
 						Option::putopt(j, i, SUB);
 					}
 				}
+				dp[i][jj] = res;
 				if (res < tmp_res) {
-					for (int y, k = list2[i]; k; k = e2[k].nex) {
-						y = e2[k].y;
+					//#pragma omp parallel for
+					for (int k = 0; k <= nex[i][0]; k++) {
+						int y = nex[i][k];
 						if (!inq[y]) {
 							inq[y] = true;
-							q[cur ^ 1][total++] = y;
+							q[cur ^ 1][total] = y;
+							#pragma omp atomic update
+							total++;
 						}
 					}
 				}
 			}
 			cur ^= 1;
-			if (total > 0) {
-				head = 0;
-				tail = total;
-			}
+			tail = total;
 		} while (total > 0);
 	}
 
 	int ans = maxn, en;
 	for (int i = 1; i <= m; i++)
-		if (ans > dp[n & 1][i]) {
-			ans = dp[n & 1][i];
+		if (ans > dp[i][n & 1]) {
+			ans = dp[i][n & 1];
 			en = i;
 		}
 
@@ -355,7 +343,6 @@ int main() {
 		putchar(out[i]);
 	printf("\n%d\n", ans);
 	
-	//memset(opt, 0, sizeof opt);
 	Option::clearopt();
 	calc(s, n, out, outlen, true);
 	print_opt(n, outlen);
