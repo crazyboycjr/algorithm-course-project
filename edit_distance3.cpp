@@ -214,7 +214,7 @@ int *calc(char *s, int n, char *t, int m, bool bf) {
 }
 
 int main() {
-	omp_set_num_threads(4);
+	//omp_set_num_threads(4);
 
 	mapping['A'] = 0; mapping['G'] = 1; mapping['C'] = 2; mapping['T'] = 3;
 	rev_mapping[0] = 'A'; rev_mapping[1] = 'G'; rev_mapping[2] = 'C'; rev_mapping[3] = 'T';
@@ -279,10 +279,8 @@ int main() {
 			for (int i = 0; i < total; i++)
 				inq[q[cur][i]] = false;
 			total = 0;
-			//while (head < tail) {
 			#pragma omp parallel for schedule(dynamic, 512)
 			for (int ii = 0; ii < tail; ii++) {
-				//int i = q[cur][head++];
 				int i = q[cur][ii];
 				int res = dp[i][jj], tmp_res = res;
 				//#pragma omp parallel for reduction(min:res)
