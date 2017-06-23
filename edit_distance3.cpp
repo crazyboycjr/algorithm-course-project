@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <iostream>
 
+#include <omp.h>
+
 using namespace std;
 
 enum Operation {
@@ -37,10 +39,13 @@ public:
 		return (mem[pos >> 2] & (3 << shift)) >> shift;
 	}
 	static void putfa(long n, long m, int val) {
-		long pos = n * maxm + m;
-		ft[pos >> 5] |= 1 << (pos & 31);
-		int shift = (pos & 3) << 1;
-		mem[pos >> 2] = val << shift | (~(3 << shift) & mem[pos >> 2]);
+		#pragma omp critical
+		{
+			long pos = n * maxm + m;
+			ft[pos >> 5] |= 1 << (pos & 31);
+			int shift = (pos & 3) << 1;
+			mem[pos >> 2] = val << shift | (~(3 << shift) & mem[pos >> 2]);
+		}
 	}
 	static int getopt(long n, long m) {
 		long pos = n * maxm + m;
@@ -48,9 +53,12 @@ public:
 		return (mem[(pos >> 2) + offset] & (3 << shift)) >> shift;
 	}
 	static void putopt(long n, long m, int val) {
-		long pos = n * maxm + m;
-		int shift = (pos & 3) << 1;
-		mem[(pos >> 2) + offset] = val << shift | (~(3 << shift) & mem[(pos >> 2) + offset]);
+		#pragma omp critical
+		{
+			long pos = n * maxm + m;
+			int shift = (pos & 3) << 1;
+			mem[(pos >> 2) + offset] = val << shift | (~(3 << shift) & mem[(pos >> 2) + offset]);
+		}
 	}
 	static void clearopt() {
 		memset(mem + offset, 0, sizeof mem / 2);
@@ -206,6 +214,8 @@ int *calc(char *s, int n, char *t, int m, bool bf) {
 }
 
 int main() {
+	omp_set_num_threads(4);
+
 	mapping['A'] = 0; mapping['G'] = 1; mapping['C'] = 2; mapping['T'] = 3;
 	rev_mapping[0] = 'A'; rev_mapping[1] = 'G'; rev_mapping[2] = 'C'; rev_mapping[3] = 'T';
 
@@ -254,23 +264,30 @@ int main() {
 		int jj = j & 1, ljj = jj ^ 1;
 		fprintf(stderr, "current on %d\n", j);
 
+		#pragma omp parallel for schedule(dynamic, 1024)
 		for (int i = 1; i <= m; i++) {
 			dp[i][jj] = j >= (int)bound[i].size() ? j - tlen : bound[i][j];
 		}
-		int cur = 0, total = m;
-		int head(0), tail(0);
+
+		int cur = 0, tail = 0, total = m;
+		#pragma omp parallel for schedule(dynamic, 1024)
 		for (int i = 1; i <= m; i++)
-			q[cur][tail++] = i;
+			q[cur][i - 1] = i;
+		tail = m;
 		do {
+			#pragma omp parallel for schedule(dynamic, 1024)
 			for (int i = 0; i < total; i++)
 				inq[q[cur][i]] = false;
 			total = 0;
-			while (head < tail) {
-				int i = q[cur][head++];
-				int &res = dp[i][jj];
-				int tmp_res = res;
-				for (int y, k = 1; k <= pre[i][0]; k++) {
-					y = pre[i][k];
+			//while (head < tail) {
+			#pragma omp parallel for schedule(dynamic, 512)
+			for (int ii = 0; ii < tail; ii++) {
+				//int i = q[cur][head++];
+				int i = q[cur][ii];
+				int res = dp[i][jj], tmp_res = res;
+				//#pragma omp parallel for reduction(min:res)
+				for (int k = 1; k <= pre[i][0]; k++) {
+					int y = pre[i][k];
 					if (s[j] == ns[i][tlen]) {
 						if (res > dp[y][ljj]) {
 							res = dp[y][ljj];
@@ -293,21 +310,22 @@ int main() {
 						Option::putopt(j, i, SUB);
 					}
 				}
+				dp[i][jj] = res;
 				if (res < tmp_res) {
-					for (int y, k = 0; k <= nex[i][0]; k++) {
-						y = nex[i][k];
+					//#pragma omp parallel for
+					for (int k = 0; k <= nex[i][0]; k++) {
+						int y = nex[i][k];
 						if (!inq[y]) {
 							inq[y] = true;
-							q[cur ^ 1][total++] = y;
+							q[cur ^ 1][total] = y;
+							#pragma omp atomic update
+							total++;
 						}
 					}
 				}
 			}
 			cur ^= 1;
-			if (total > 0) {
-				head = 0;
-				tail = total;
-			}
+			tail = total;
 		} while (total > 0);
 	}
 
